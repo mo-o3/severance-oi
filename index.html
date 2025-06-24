@@ -18,6 +18,7 @@
             width: 100vw;
             overflow: hidden;
             font-family: monospace;
+            touch-action: manipulation; /* Prevent browser gestures */
         }
 
         .container {
@@ -36,6 +37,7 @@
             text-align: center;
             transition: all 0.3s ease;
             cursor: pointer;
+            user-select: none; /* Prevent text selection */
         }
 
         /* ========== ANIMATIONS ========== */
@@ -142,6 +144,7 @@
         let currentPattern = [];
         let cols = 0, rows = 0;
         let triggerCells = [];
+        let lastHoveredGroup = null; // For touch interactions
 
         // ========== DOM ELEMENTS ==========
         const container = document.getElementById('canvas');
@@ -160,6 +163,7 @@
             patternInput.value = currentPattern.join('');
             createGrid(currentPattern);
             setupEventListeners();
+            setupTouchEvents();
         }
 
         // ========== GRID MANAGEMENT ==========
@@ -199,45 +203,83 @@
             }
         }
 
-        // ========== INTERACTIONS ==========
-        function setupInteractions() {
-            container.querySelectorAll('.char').forEach((char, index) => {
-                // Click animation
-                char.addEventListener('click', function() {
-                    this.classList.add('wiggle');
-                    const originalColor = window.getComputedStyle(this).color;
-                    this.style.color = getRandomHSL();
-                    setTimeout(() => {
-                        this.classList.remove('wiggle');
-                        this.style.color = originalColor;
-                    }, 600);
-                });
+        // ========== TOUCH EVENT HANDLERS ==========
+        function setupTouchEvents() {
+            container.addEventListener('touchstart', handleTouchStart, { passive: false });
+            container.addEventListener('touchmove', handleTouchMove, { passive: false });
+            container.addEventListener('touchend', handleTouchEnd);
+        }
 
-                // Hover effect
-                char.addEventListener('mouseenter', function() {
-                    const randomColor = getRandomHSL();
-                    const positions = getSurroundingPositions(index);
+        function handleTouchStart(e) {
+            if (e.touches.length === 1) {
+                const touch = e.touches[0];
+                processTouchPoint(touch.clientX, touch.clientY);
+            }
+        }
+
+        function handleTouchMove(e) {
+            if (e.touches.length === 1) {
+                const touch = e.touches[0];
+                processTouchPoint(touch.clientX, touch.clientY);
+                e.preventDefault(); // Prevent scrolling
+            }
+        }
+
+        function handleTouchEnd() {
+            if (lastHoveredGroup) {
+                removeHoverEffectFromGroup(lastHoveredGroup.positions);
+                lastHoveredGroup = null;
+            }
+        }
+
+        function processTouchPoint(x, y) {
+            const element = document.elementFromPoint(x, y);
+            if (element && element.classList.contains('char')) {
+                const index = Array.from(container.children).indexOf(element);
+                if (index !== -1) {
+                    // Check if we're still in the same group
+                    if (lastHoveredGroup && lastHoveredGroup.positions.includes(index)) {
+                        return;
+                    }
                     
-                    positions.forEach(pos => {
-                        const element = container.children[pos];
-                        if(element) {
-                            element.style.transform = 'scale(1.5)';
-                            element.style.opacity = '1';
-                            element.style.color = randomColor;
-                        }
-                    });
+                    // Remove previous effect if exists
+                    if (lastHoveredGroup) {
+                        removeHoverEffectFromGroup(lastHoveredGroup.positions);
+                    }
+                    
+                    // Apply new effect
+                    const positions = getSurroundingPositions(index);
+                    const randomColor = getRandomHSL();
+                    applyHoverEffectToGroup(positions, randomColor);
+                    lastHoveredGroup = { positions, color: randomColor };
+                }
+            } else if (lastHoveredGroup) {
+                // Remove effect when moving outside grid
+                removeHoverEffectFromGroup(lastHoveredGroup.positions);
+                lastHoveredGroup = null;
+            }
+        }
 
-                    setTimeout(() => {
-                        positions.forEach(pos => {
-                            const element = container.children[pos];
-                            if(element) {
-                                element.style.transform = 'scale(1)';
-                                element.style.opacity = '0.3';
-                                element.style.color = "rgba(255,255,255,0.3)";
-                            }
-                        });
-                    }, 300);
-                });
+        // ========== HOVER EFFECT UTILITIES ==========
+        function applyHoverEffectToGroup(positions, color) {
+            positions.forEach(pos => {
+                const element = container.children[pos];
+                if(element) {
+                    element.style.transform = 'scale(1.5)';
+                    element.style.opacity = '1';
+                    element.style.color = color;
+                }
+            });
+        }
+
+        function removeHoverEffectFromGroup(positions) {
+            positions.forEach(pos => {
+                const element = container.children[pos];
+                if(element) {
+                    element.style.transform = 'scale(1)';
+                    element.style.opacity = '0.3';
+                    element.style.color = "rgba(255,255,255,0.3)";
+                }
             });
         }
 
@@ -252,6 +294,33 @@
                 index + cols - 1,       // Bottom-Left
                 index + cols + 1        // Bottom-Right
             ];
+        }
+
+        // ========== INTERACTIONS ==========
+        function setupInteractions() {
+            container.querySelectorAll('.char').forEach((char, index) => {
+                // Click animation
+                char.addEventListener('click', function() {
+                    this.classList.add('wiggle');
+                    const originalColor = window.getComputedStyle(this).color;
+                    this.style.color = getRandomHSL();
+                    setTimeout(() => {
+                        this.classList.remove('wiggle');
+                        this.style.color = originalColor;
+                    }, 600);
+                });
+
+                // Mouse hover effect
+                char.addEventListener('mouseenter', function() {
+                    const randomColor = getRandomHSL();
+                    const positions = getSurroundingPositions(index);
+                    applyHoverEffectToGroup(positions, randomColor);
+                    
+                    setTimeout(() => {
+                        removeHoverEffectFromGroup(positions);
+                    }, 300);
+                });
+            });
         }
 
         // ========== TRIGGER SYSTEM ==========
